@@ -10,6 +10,10 @@ import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python.components.containers.landmark import NormalizedLandmark
 import os
+import supervision as sv
+import ultralytics
+from ultralytics import YOLO
+from IPython.display import display, Image
 
 # DEFINE CONSTANTS
 # Must download
@@ -144,7 +148,7 @@ pose_options = PoseLandmarkerOptions(
 )
 
 
-def get_position(lm: NormalizedLandmark, width: int, height: int) -> (int, int):
+def get_position(lm: NormalizedLandmark, width: int, height: int) -> tuple[int, int]:
     """
     Maps a landmark to a pixel
     :param lm the landmark to use (with x,y in [0,1])
@@ -161,6 +165,8 @@ def main():
     """
     Main function that sets up video feed, runs model, and displays livestream
     """
+    model = YOLO('best.pt')  # Path to your model file
+    
     with PoseLandmarker.create_from_options(pose_options) as pose_landmarker:
         with HandLandmarker.create_from_options(hand_options) as hand_landmarker:
             # get video capture
@@ -174,6 +180,11 @@ def main():
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
                 hand_landmarker.detect_async(mp_image, frame_count)
                 pose_landmarker.detect_async(mp_image, frame_count)
+
+                # yolov8 prediction
+                results = model(frame)
+                detections = sv.Detections.from_ultralytics(results[0])
+
                 # display the frame
                 frame = np.copy(frame)
                 height = len(frame)
@@ -244,6 +255,14 @@ def main():
                             )
                         yPos += dy
 
+                # add bounding boxes
+                oriented_box_annotator = sv.OrientedBoxAnnotator()
+                annotated_frame = oriented_box_annotator.annotate(
+                    scene=frame,
+                    detections=detections
+)
+
+                # sv.plot_image(image=frame, size=(16, 16))
                 cv2.imshow('frame', frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
