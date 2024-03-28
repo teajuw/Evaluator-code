@@ -22,7 +22,7 @@ class AudioAnalysis:
         self.score = converter.parse(score_path)
         self.correct_df = None
     
-    def generate_dataframe_from_score(self) -> None:
+    def generate_dataframe_from_score(self, bpm=None) -> None:
 
         """
         Given a score that has been converted to a music21.stream.Score object, this method extracts information from the
@@ -76,7 +76,7 @@ class AudioAnalysis:
             measure_notes.append(notes)
             measure_notes_frequency.append(notes_frequency)
 
-        bpm = tempo_changes[1]
+        if (bpm == None): bpm = tempo_changes[1]
         quarter_note_duration = (1 / bpm) * 60
         note_duration = []
         for measure in durations:
@@ -104,6 +104,117 @@ class AudioAnalysis:
 
     def compare_dataframe_by_time(self) -> pd.DataFrame:
         
+        """
+        Compares the two dataframes representing correct notes and notes played by the user and appends information
+        comparing differences to a new dataframe so notes with wrong intonation can be easily identified.
+        """
+
+        self.generate_dataframe_from_score()
+        note_statuses = [] # ANTHONY: changed format. A list of lists. Each list is of note characteristics for each note played. Contains what note it correlates to in score and info on how well it was played
+        audio_df_iterator = 0
+        while (self.input_df['Note Name'][audio_df_iterator] == 'rest'): # skip leading rests for now
+            self.input_df.drop(audio_df_iterator, inplace=True, axis=0)
+            audio_df_iterator += 1
+
+        rest_offset = self.input_df['Times'][audio_df_iterator]
+        self.input_df['Times'] = self.input_df['Times'] - rest_offset
+
+
+        # Prevent comparison of notes from going out of bounds.
+        num_notes = len(list(self.correct_df['Note Name'])) # Number of notes in the score
+        # For each note in the score, find all of the notes played (could be none) in the time frame that the user should have been playing that score note
+        # Notes are added to attempted_notes as rows of a df
+        for score_note_idx in range(num_notes):
+            note_start = self.correct_df['Start Time'][score_note_idx]
+            note_end = note_start + self.correct_df['Duration'][score_note_idx]
+            correct_note = self.correct_df['Note Name'][score_note_idx]
+
+            avg_cents = 0
+            samples = 0
+            notes_played = []
+            played_start = -1
+            played_end = -1
+            while (audio_df_iterator < len(list(self.input_df['Note Name'])) and self.input_df['Times'][audio_df_iterator] < note_end):
+                samples += 1
+                audio_df_iterator += 1
+                avg_cents += self.input_df['Cents'][audio_df_iterator]
+
+                played_name = self.input_df['Note Name'][audio_df_iterator]
+                notes_played.append(played_name)
+                if (played_start == -1 and (played_name == correct_note)): # first instance of correct note in window
+                    played_start = self.input_df['Times'][audio_df_iterator]
+                if (played_start != 1 and (played_name == correct_note)): # last instance of correct note in window
+                    played_end = self.input_df['Times'][audio_df_iterator]
+            
+            note_name = max(set(notes_played), key=notes_played.count)
+            played_cents = avg_cents / samples
+            played_length = played_end - played_start
+
+
+            # Now compare each note played the correct note at that time
+            correct_note = self.correct_df.iloc[score_note_idx]
+            score_length = correct_note['Duration']
+            note_status_dict = {}
+
+            note_status_dict['Index'] = score_note_idx
+
+            print(correct_note['Note Name'], note_name)
+
+            # Check frequency
+            if correct_note['Note Name'] == note_name:
+                if correct_note['Note Name'] == 'rest':
+                    note_status_dict['Intonation'] = "Rest"
+                elif abs(played_cents) > AudioAnalysis.CENT_TOLERANCE and played_cents < 0:
+                    note_status_dict['Intonation'] = "Flat"
+                elif abs(played_cents) > AudioAnalysis.CENT_TOLERANCE and played_cents > 0:
+                    note_status_dict['Intonation'] = 'Sharp'
+
+                else:
+                    note_status_dict['Intonation'] = 'Correct'
+                    # note_status.append("Correct")
+                    # pass statements here for now in case we want to explicitly say each thing done correctly
+
+                # Check length (short/long) if note was correct
+                
+                if abs(played_length - score_length) > AudioAnalysis.BEAT_TOLERANCE and played_length > score_length: # What does beat tolerance mean? It's measured in seconds not beats here
+                    note_status_dict['Duration'] = "Long"
+                elif abs(played_length - score_length) > AudioAnalysis.BEAT_TOLERANCE and played_length < score_length:
+                    note_status_dict['Duration'] = "Short"
+                else:
+                    note_status_dict['Duration'] = "Correct"
+                    # note_status.append("Correct")
+                    
+
+                # Check start (early/late) if note was correct
+                if abs(played_start - note_start) > AudioAnalysis.BEAT_TOLERANCE and played_start > note_start: # Should we have a different tolerance for early/late starts?
+                    note_status_dict['Start Time'] = "Late"
+                elif abs(played_start - note_start) > AudioAnalysis.BEAT_TOLERANCE and played_start < note_start:
+                    note_status_dict['Start Time'] = "Early"
+                else:
+                    note_status_dict['Start Time'] = "Correct"
+                    # note_status.append("Correct")                 
+            
+            else:
+                note_status_dict['Intonation'] = "Wrong"
+                note_status_dict['Duration'] = "Correct" # ignore
+                note_status_dict['Start Time'] = "Correct" # ignore
+            
+            note_status_dict['Played Note'] = note_name
+            note_status_dict['Expected Note'] = correct_note['Note Name']
+            note_statuses.append(note_status_dict)
+        
+        
+        series_list = []
+        for note_status in note_statuses:
+            temp_series = pd.Series(note_status)
+            series_list.append(temp_series)
+        played_notes_df = pd.DataFrame(series_list)
+        
+        print(note_status_dict)
+        return played_notes_df
+
+    def compare_dataframe_by_onset(self) -> pd.DataFrame:
+        # Saving this function in case we find an accurate onset detection method
         """
         Compares the two dataframes representing correct notes and notes played by the user and appends information
         comparing differences to a new dataframe so notes with wrong intonation can be easily identified.
@@ -372,10 +483,11 @@ class AudioAnalysis:
         #         new_score.append(incorrect_note)
         #     print(beat_status[i])
         new_score.show('musicxml')
-        new_score.write('mxl', 'josh_demo.mxl') # changed for demo
+        new_score.write('mxl', 'demo.mxl') # changed for demo
         
         
 if __name__ == '__main__':
-    df = pd.read_csv('scale.csv')
-    a = AudioAnalysis(df, 'cscale.xml')
+    df = pd.read_csv('output.csv')
+    a = AudioAnalysis(df, 'twinkle2.mxl')
     print(a.compare_dataframe_by_time())
+    print(a.correct_df)
