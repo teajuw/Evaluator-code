@@ -109,7 +109,7 @@ class AudioAnalysis:
         comparing differences to a new dataframe so notes with wrong intonation can be easily identified.
         """
 
-        self.generate_dataframe_from_score()
+        self.generate_dataframe_from_score(bpm=80) # user should be able to input their bpm. Make an optional part of class constructor later
         note_statuses = [] # ANTHONY: changed format. A list of lists. Each list is of note characteristics for each note played. Contains what note it correlates to in score and info on how well it was played
         audio_df_iterator = 0
         while (self.input_df['Note Name'][audio_df_iterator] == 'rest'): # skip leading rests for now
@@ -154,11 +154,10 @@ class AudioAnalysis:
             # Now compare each note played the correct note at that time
             correct_note = self.correct_df.iloc[score_note_idx]
             score_length = correct_note['Duration']
+            score_end = correct_note['Start Time'] + score_length
             note_status_dict = {}
 
             note_status_dict['Index'] = score_note_idx
-
-            print(correct_note['Note Name'], note_name)
 
             # Check frequency
             if correct_note['Note Name'] == note_name:
@@ -192,13 +191,16 @@ class AudioAnalysis:
                     note_status_dict['Start Time'] = "Early"
                 else:
                     note_status_dict['Start Time'] = "Correct"
-                    # note_status.append("Correct")                 
+                    # note_status.append("Correct")     
+                self.input_df['Times'] = self.input_df['Times'] + (score_end - played_end) # correct for future notes? This doesnt work in all cases.    
             
             else:
                 note_status_dict['Intonation'] = "Wrong"
                 note_status_dict['Duration'] = "Correct" # ignore
                 note_status_dict['Start Time'] = "Correct" # ignore
             
+            print(score_end - played_end)
+
             note_status_dict['Played Note'] = note_name
             note_status_dict['Expected Note'] = correct_note['Note Name']
             note_statuses.append(note_status_dict)
@@ -210,7 +212,7 @@ class AudioAnalysis:
             series_list.append(temp_series)
         played_notes_df = pd.DataFrame(series_list)
         
-        print(note_status_dict)
+        print(played_notes_df)
         return played_notes_df
 
     def compare_dataframe_by_onset(self) -> pd.DataFrame:
@@ -349,7 +351,6 @@ class AudioAnalysis:
         # new_df.insert(5, "Input Duration", input_durations)
         # new_df.insert(6, "Beat Status", beat_status)
         # return new_df
-        print(played_notes_df)
         return played_notes_df
 
     def compare_dataframe(self) -> pd.DataFrame:
@@ -445,6 +446,7 @@ class AudioAnalysis:
                     incorrect_note = music21.note.Note(str(played_notes[i]))
                     correct_note.duration.type = str(note_type)
                     incorrect_note.duration.type = str(note_type)
+                    correct_note.style.color = 'green'
                     incorrect_note.style.color = 'red'
                     combined_chord = music21.chord.Chord([correct_note, incorrect_note])
                     new_score.append(combined_chord)
@@ -482,12 +484,12 @@ class AudioAnalysis:
         #         incorrect_note.style.color = 'orange'
         #         new_score.append(incorrect_note)
         #     print(beat_status[i])
-        new_score.show('musicxml')
-        new_score.write('mxl', 'demo.mxl') # changed for demo
+        # new_score.show('musicxml')
+        new_score.write('mxl', 'demo.mxl')
         
         
 if __name__ == '__main__':
-    df = pd.read_csv('output.csv')
+    df = pd.read_csv('dataframes/missed.csv')
     a = AudioAnalysis(df, 'twinkle2.mxl')
-    print(a.compare_dataframe_by_time())
+    a.generate_overlay_score()
     print(a.correct_df)
