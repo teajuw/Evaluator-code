@@ -134,7 +134,7 @@ def extract_frames_from_video(video_path, output_folder, frame_per_second, image
     success, image = vidcap.read()
 
     total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
-    random_frame_list = generate_unique_random_list(1, total_frames, 100)
+    random_frame_list = generate_unique_random_list(1, total_frames, 70)
 
     if frame_per_second:
         fps = vidcap.get(cv2.CAP_PROP_FPS)
@@ -182,7 +182,7 @@ def main(video_path, output_path):
     extract_frames(video_path, output_path, True, True)
 
 if __name__ == "__main__":
-    video_path = "/Users/felixlu/Downloads/HYS Cello Sample Audition (480p60).mp4"
+    video_path = "/Users/felixlu/Downloads/20240718_202625.mp4"
     output_path = "/Users/felixlu/Desktop/Evaluator_Videos"
     main(video_path, output_path)
 
