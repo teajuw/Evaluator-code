@@ -83,8 +83,11 @@ def main():
   # model.overlap = 80
 
   #input file
-  video_file_path = '/Users/felixlu/Downloads/20240718_164804.mp4'
+  #video_file_path = '/Users/felixlu/Downloads/Supination.mp4'
   #video_file_path = '/Users/felixlu/Desktop/Evaluator/Evaluator-code/src/computer_vision/hand_pose_detection/Vertigo for Solo Cello - Cicely Parnas.mp4'
+  video_file_path = '/Users/felixlu/Downloads/20240718_164536.mp4'
+
+
   cap = cv2.VideoCapture(video_file_path)
 
   frame_count = 0
@@ -103,8 +106,9 @@ def main():
 
   #setup gesture options
   num_hands = 2
+
   gesture_options = GestureRecognizerOptions(
-    base_options=BaseOptions(model_asset_path=gesture_model),
+    base_options=BaseOptions(model_asset_buffer = open(gesture_model, "rb").read()),
     running_mode=VisionRunningMode.VIDEO,
     num_hands = num_hands)
 
@@ -266,6 +270,7 @@ def main():
                 for ids, landmrk in enumerate(hand_landmarks.landmark):
                     cx, cy = landmrk.x * image_width, landmrk.y * image_height
                     store_finger_node_coords(ids, cx, cy, finger_coords)
+                
                 mp_drawing.draw_landmarks(
                     image,
                     hand_landmarks,
@@ -276,11 +281,13 @@ def main():
                 landmark_subset = landmark_pb2.NormalizedLandmarkList(
                     landmark=pose_results.pose_landmarks.landmark[11:15]
                 )
+        
                 mp_drawing.draw_landmarks(
                     image,
                     landmark_subset,
                     None,
                     mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=10, circle_radius=6))
+                
 
         oriented_box_annotator = sv.OrientedBoxAnnotator()
         annotated_frame = oriented_box_annotator.annotate(
